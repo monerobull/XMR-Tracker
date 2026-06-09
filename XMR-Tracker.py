@@ -1,3 +1,5 @@
+#! /usr/bin/env python3
+
 import requests
 from PIL import Image, ImageDraw, ImageFont
 import time
@@ -13,8 +15,12 @@ UPDATE_INTERVAL = 60  # Faster update makes the timer more accurate but reduces 
 
 last_price = 0
 
+def log(msg):
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}")
+
 def get_crypto_price():
     try:
+        log("Fetching price...")
         url = f"https://api.coingecko.com/api/v3/simple/price?ids={CRYPTO_ID}&vs_currencies={CURRENCY}"
         r = requests.get(url, timeout=10)
         return r.json()[CRYPTO_ID][CURRENCY]
@@ -30,6 +36,7 @@ def get_block_data():
 
     for url in sources:
         try:
+            log(f"Fetching block data from {url}...")
             r = requests.get(url, timeout=5, headers={'User-Agent': 'Mozilla/5.0'})
             data = r.json()
             # Handle p2pool format
@@ -87,11 +94,22 @@ def create_image(price, height, block_time):
     return buf.getvalue()
 
 def upload(image_bytes):
+    filename = 'crypto.jpg'
     url = f"http://{DEVICE_IP}/doUpload?dir=/image/"
-    files = {'file': ('crypto.jpg', image_bytes, 'image/jpeg')}
+    files = {'file': (filename, image_bytes, 'image/jpeg')}
     try:
+        log("Uploading image...")
         r = requests.post(url, files=files, timeout=5)
-        return r.status_code == 200
+        log(f"doUpload status: {r.status_code}")
+        
+        if r.status_code == 200:
+            log("Setting image on device...")
+            r = requests.get(f"http://{DEVICE_IP}/set?img=%2Fimage%2F{filename}", timeout=5)
+            log(f"set image status: {r.status_code}")
+
+            return r.status_code == 200
+        
+        return False
     except:
         return False
 
@@ -104,7 +122,7 @@ while True:
     if price and height and b_time:
         img_data = create_image(price, height, b_time)
         if upload(img_data):
-            print(f"[{datetime.now().strftime('%H:%M:%S')}] XMR: €{price} | Height: {height}")
+            log(f"XMR: €{price} | Height: {height}")
     else:
         print("Data fetch failed. Retrying...")
 
